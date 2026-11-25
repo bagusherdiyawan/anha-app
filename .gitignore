@@ -1,0 +1,42 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Secrets & signing (JANGAN di-commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.jks
+*.keystore
+key.properties
+local.properties
+
+# Release artifacts & arsip
+*.zip
+*.aab
+*.apk
+
+# Backend / Laravel
+vendor/
+node_modules/
+public/build/
+public/hot
+storage/*.key
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+error_log
+*.log
+
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+**/Pods/
+**/ephemeral/
