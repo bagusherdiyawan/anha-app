@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Exceptions\ApiException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -19,38 +21,38 @@ class ApiClient
             $url .= (str_contains($url, '?') ? '&' : '?').http_build_query($query);
         }
 
-        return $this->decode($this->baseRequest()->get($url));
+        return $this->decode($this->guard(fn () => $this->baseRequest()->retry(3, 400, $this->retryOnConnectionError(), throw: false)->get($url)));
     }
 
     public function post(string $endpoint, array $payload = []): array
     {
-        return $this->decode($this->baseRequest()->post($this->url($endpoint), $payload));
+        return $this->afterWrite($endpoint, $this->decode($this->guard(fn () => $this->baseRequest()->post($this->url($endpoint), $payload))));
     }
 
     public function put(string $endpoint, array $payload = []): array
     {
-        return $this->decode($this->baseRequest()->put($this->url($endpoint), $payload));
+        return $this->afterWrite($endpoint, $this->decode($this->guard(fn () => $this->baseRequest()->put($this->url($endpoint), $payload))));
     }
 
     public function patch(string $endpoint, array $payload = []): array
     {
-        return $this->decode($this->baseRequest()->patch($this->url($endpoint), $payload));
+        return $this->afterWrite($endpoint, $this->decode($this->guard(fn () => $this->baseRequest()->patch($this->url($endpoint), $payload))));
     }
 
     public function delete(string $endpoint): array
     {
-        $response = $this->baseRequest()->delete($this->url($endpoint));
+        $response = $this->guard(fn () => $this->baseRequest()->delete($this->url($endpoint)));
 
         if ($response->status() === 204) {
-            return ['success' => true, 'message' => 'Data berhasil dihapus.'];
+            return $this->afterWrite($endpoint, ['success' => true, 'message' => 'Data berhasil dihapus.']);
         }
 
-        return $this->decode($response);
+        return $this->afterWrite($endpoint, $this->decode($response));
     }
 
     public function postMultipart(string $endpoint, array $fields, array $files = []): array
     {
-        return $this->decode($this->sendMultipart($endpoint, $fields, $files));
+        return $this->afterWrite($endpoint, $this->decode($this->sendMultipart($endpoint, $fields, $files)));
     }
 
     public function updateMultipart(string $endpoint, array $fields, array $files = []): array
@@ -63,7 +65,7 @@ class ApiClient
             $response = $this->sendMultipart($endpoint, $withPatch, $files);
         }
 
-        return $this->decode($response);
+        return $this->afterWrite($endpoint, $this->decode($response));
     }
 
     public function assetUrl(?string $path): ?string
@@ -235,6 +237,81 @@ class ApiClient
         return array_values(array_unique(array_filter($out)));
     }
 
+    /**
+     * Ambil daftar (rows) untuk data referensi yang jarang berubah (kategori, satuan)
+     * dengan cache singkat. Hanya respons sukses yang di-cache; error tidak pernah disimpan.
+     * Jika cache tidak tersedia, otomatis fallback ke panggilan API biasa.
+     *
+     * @return array<int, mixed>
+     */
+    public function cachedRows(string $endpoint, array $query = [], int $ttlSeconds = 300): array
+    {
+        $key = $this->rowsCacheKey($endpoint);
+
+        try {
+            $hit = Cache::store('file')->get($key);
+            if (is_array($hit)) {
+                return $hit;
+            }
+        } catch (\Throwable) {
+            // cache bermasalah -> lanjut ke API
+        }
+
+        $rows = $this->unwrapList($this->get($endpoint, $query))['rows'];
+
+        try {
+            Cache::store('file')->put($key, $rows, $ttlSeconds);
+        } catch (\Throwable) {
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Setiap penulisan yang berhasil membuang cache daftar dari endpoint yang sama,
+     * sehingga perubahan kategori/satuan langsung terlihat tanpa menunggu TTL.
+     */
+    private function afterWrite(string $endpoint, array $result): array
+    {
+        try {
+            Cache::store('file')->forget($this->rowsCacheKey($endpoint));
+        } catch (\Throwable) {
+        }
+
+        return $result;
+    }
+
+    private function rowsCacheKey(string $endpoint): string
+    {
+        $base = explode('/', trim(parse_url($endpoint, PHP_URL_PATH) ?: $endpoint, '/'))[0];
+
+        return 'anha.rows.'.md5($base);
+    }
+
+    /**
+     * Retry hanya untuk error koneksi (mis. "Connection reset by peer"), bukan untuk respons HTTP 4xx/5xx.
+     * Hanya dipakai pada request GET karena aman diulang (idempotent).
+     */
+    private function retryOnConnectionError(): \Closure
+    {
+        return fn (\Throwable $e) => $e instanceof ConnectionException;
+    }
+
+    /**
+     * Ubah error jaringan (cURL 56 reset by peer, timeout, DNS) menjadi ApiException
+     * supaya ditangani controller sebagai pesan error, bukan halaman 500 mentah.
+     */
+    private function guard(\Closure $callback): Response
+    {
+        try {
+            return $callback();
+        } catch (ConnectionException $e) {
+            report($e);
+
+            throw new ApiException('Koneksi ke server sedang terganggu. Silakan coba lagi beberapa saat.', 503);
+        }
+    }
+
     private function baseRequest(): PendingRequest
     {
         $request = Http::timeout((int) config('anha.request_timeout', 30))->acceptJson();
@@ -272,9 +349,9 @@ class ApiClient
             }
         }
 
-        return $this->baseRequest()
+        return $this->guard(fn () => $this->baseRequest()
             ->asMultipart()
-            ->post($this->url($endpoint), $multipart);
+            ->post($this->url($endpoint), $multipart));
     }
 
     /**

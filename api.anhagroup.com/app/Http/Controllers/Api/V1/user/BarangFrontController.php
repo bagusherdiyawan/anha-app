@@ -308,7 +308,11 @@ class BarangFrontController extends Controller
             $barangs = $this->baseProductQuery($role);
 
             if (!empty($keyword)) {
-                $barangs = $barangs->where('nama_barang', 'like', '%' . $keyword . '%');
+                $barangs = $barangs->where(function ($q) use ($keyword) {
+                    $q->where('nama_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('kode_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('barcode', 'like', '%' . $keyword . '%');
+                });
             }
             if (!empty($kodebarang)) {
                 $barangs = $barangs->where('kode_barang', $kodebarang);

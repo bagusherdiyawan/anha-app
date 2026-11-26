@@ -303,7 +303,7 @@ class ProductController extends Controller
     private function categoryOptions(?string $currentCode = null, ?string $currentName = null): array
     {
         try {
-            $rows = $this->api->unwrapList($this->api->get('/kategoribarangs', ['page' => 1, 'limit' => 10000]))['rows'];
+            $rows = $this->api->cachedRows('/kategoribarangs', ['page' => 1, 'limit' => 10000]);
         } catch (ApiException) {
             $rows = [];
         }
@@ -333,7 +333,7 @@ class ProductController extends Controller
     private function unitOptions(?string $currentCode = null, ?string $currentName = null): array
     {
         try {
-            $rows = $this->api->unwrapList($this->api->get('/admin-satuan-barang', ['page' => 1, 'limit' => 10000]))['rows'];
+            $rows = $this->api->cachedRows('/admin-satuan-barang', ['page' => 1, 'limit' => 10000]);
         } catch (ApiException) {
             $rows = [];
         }

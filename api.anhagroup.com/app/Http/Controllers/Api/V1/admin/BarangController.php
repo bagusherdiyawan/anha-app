@@ -43,7 +43,11 @@ class BarangController extends Controller
                 'barangs.is_available',
                 DB::raw('(select url_foto_barang from barangs_foto where id_barang = barangs.id limit 1) as foto')
             )
-                ->where('nama_barang', 'like', '%' . $keyword . '%')
+                ->where(function ($q) use ($keyword) {
+                    $q->where('nama_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('kode_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('barcode', 'like', '%' . $keyword . '%');
+                })
                 ->orderBy('id', 'desc');
 
             $barangs->join('barangs_satuan', 'barangs_satuan.id', '=', 'barangs.satuan');
@@ -417,7 +421,11 @@ class BarangController extends Controller
             $status_active = $request->query('status_active');
 
             $barangs = Barang::select('barangs.id', 'nama_barang', 'kode_barang', 'barcode', 'satuan', 'barangs_satuan.nama as satuan_nama', 'barangs.deskripsi', 'barangs_hrg_ritel.harga', 'barangs_hrg_ritel.is_active', 'kode_kategori', 'kategori_barangs.nama as nama_kategori', 'rating', DB::raw('(select url_foto_barang from barangs_foto where id_barang = barangs.id limit 1) as foto'))
-                ->where('nama_barang', 'like', '%' . $keyword . '%')
+                ->where(function ($q) use ($keyword) {
+                    $q->where('nama_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('kode_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('barcode', 'like', '%' . $keyword . '%');
+                })
                 ->orderBy('id', 'desc');
 
             $barangs->join('barangs_satuan', 'barangs_satuan.id', '=', 'barangs.satuan');
@@ -460,7 +468,11 @@ class BarangController extends Controller
             $status_active = $request->query('status_active');
 
             $barangs = Barang::select('barangs.id', 'nama_barang', 'kode_barang', 'barcode', 'satuan', 'barangs_satuan.nama as satuan_nama', 'barangs.deskripsi', 'barangs_hrg_grosir.harga', 'barangs_hrg_grosir.is_active', 'kode_kategori', 'kategori_barangs.nama as nama_kategori', 'rating', DB::raw('(select url_foto_barang from barangs_foto where id_barang = barangs.id limit 1) as foto'))
-                ->where('nama_barang', 'like', '%' . $keyword . '%')
+                ->where(function ($q) use ($keyword) {
+                    $q->where('nama_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('kode_barang', 'like', '%' . $keyword . '%')
+                        ->orWhere('barcode', 'like', '%' . $keyword . '%');
+                })
                 ->orderBy('id', 'desc');
 
             $barangs->join('barangs_satuan', 'barangs_satuan.id', '=', 'barangs.satuan');
